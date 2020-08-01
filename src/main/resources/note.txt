@@ -1,0 +1,510 @@
+new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
+
+1、AnnotationConfigApplicationContext()  调用自身空构造函数，创建实例，在创建过程中调用父类GenericApplicationContext构造函数时创建了BeanFactory
+    {
+        1.1、new AnnotatedBeanDefinitionReader(AnnotationConfigApplicationContext)创建AnnotatedBeanDefinitionReader实例
+        {
+            1）调用自身另一个构造方法AnnotatedBeanDefinitionReader(registry, getOrCreateEnvironment(registry))，
+                registry是由AnnotationConfigApplicationContext转换成BeanDefinitionRegistry
+                getOrCreateEnvironment()方法新建并返回了一个StandardEnvironment，StandardEnvironment初始化时，把系统变量和系统环境变量放到了StandardEnvironment
+            {
+                初始化变量registry
+                初始化变量conditionEvaluator
+                ⭐⭐⭐AnnotationConfigUtils.registerAnnotationConfigProcessors(this.registry)
+                {
+                    ...
+                    注册了名为"org.springframework.context.annotation.internalConfigurationAnnotationProcessor"的BeanDefinition，类型为ConfigurationClassPostProcessor
+                    注册了名为"org.springframework.context.annotation.internalAutowiredAnnotationProcessor"的BeanDefinition
+                    注册了名为"org.springframework.context.annotation.internalRequiredAnnotationProcessor"的BeanDefinition
+                    注册了名为"org.springframework.context.annotation.internalCommonAnnotationProcessor"的BeanDefinition
+                    注册了名为"org.springframework.context.event.internalEventListenerProcessor"的BeanDefinition
+                    注册了名为"org.springframework.context.event.internalEventListenerFactory"的BeanDefinition
+                    ...
+                }
+            }
+        }
+        1.2、创建ClassPathBeanDefinitionScanner实例
+        {
+            ...
+        }
+    }
+2、register(annotatedClasses)注册配置类
+    2.1、reader.register(annotatedClasses) 遍历注册每个配置类
+    {
+		内部调用了context的reader.registerBean(Class<?> annotatedClass, String name, Class<? extends Annotation>... qualifiers)
+		1）AnnotatedGenericBeanDefinition abd = new AnnotatedGenericBeanDefinition(annotatedClass)  该实例得到配置类相关信息，类名、注解信息等等
+		2）判断配置类是否可以忽略
+		3）获取配置类org.springframework.context.annotation.Scope注解的信息，主要获取value和proxyMode属性值，默认singleton和不生成代理
+		4）遍历配置类所有注解信息，查找是否配置了特定的beanName，如果没有就使用默认规则生成beanName
+		5）对通用注解@Lazy，@Primary，@DependsOn，@Role，@Description进行解析，并进行相应设置
+        6）将abd和beanName封装成BeanDefinitionHolder对象
+        7）根据之前获取的Scope信息判断是否创建BeanDefinitionHolder的代理类
+        8）BeanDefinitionReaderUtils.registerBeanDefinition(definitionHolder, this.registry)，使用registry注册这个配置类
+	}
+3、refresh()  刷新AnnotationConfigApplicationContext
+    3.1、prepareRefresh()
+    {
+        1)初始化(AbstractApplicationContext)成员变量：closed=false,active=true
+        2)initPropertySources();留给子类使用的空方法
+        3)getEnvironment().validateRequiredProperties();验证必需的属性值
+        4)this.earlyApplicationEvents = new LinkedHashSet<ApplicationEvent>();创建earlyApplicationEvents
+    }
+    3.2、ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();获取刷新后的BeanFactory（设置beanFactory的序列化id为context的id）
+    3.3、prepareBeanFactory(ConfigurableListableBeanFactory beanFactory)
+    {
+    .......细节需要展开
+        设置beanFactory的beanClassLoader、beanExpressionResolver、ropertyEditorRegistrar
+        添加BeanPostProcessor：ApplicationContextAwareProcessor
+        设置忽略的Interface：EnvironmentAware、EmbeddedValueResolverAware、ResourceLoaderAware、ApplicationEventPublisherAware、
+        MessageSourceAware、ApplicationContextAware
+        设置可解析的依赖BeanFactory、ResourceLoader、ApplicationEventPublisher、ApplicationContext
+        添加beanPostProcessor：ApplicationListenerDetector
+        判断是否添加LoadTimeWeaverAwareProcessor，是则添加并设置tempClassLoader
+        注册默认的beanName为environment、systemProperties和systemEnvironment的单实例BeanDefinition；
+    }
+    3.4、postProcessBeanFactory(beanFactory);留给子类使用的空方法
+    3.5、invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory);
+    {
+        1）⭐⭐⭐PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors())
+        {
+            注册beanFactory的beanFactoryPostProcessors（按顺序执行实现了PriorityOrdered接口、实现了Ordered接口和没有实现接口的BeanFactoryPostProcessor、最后执行剩余的BeanFactoryPostProcessor的postProcessBeanDefinitionRegistry方法）
+            在这个过程中调用了BeanDefinitionRegistryPostProcessor.postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry)方法,大致过程如下：
+            //通过beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class)获得PostProcessor，getBean过程以后再补
+            {
+                把beanfactory的所有注册的beanname保存到candidateNames
+                获取registry(DefaultListableBeanFactory)的所有已经注册的BeanDefinition，通过ConfigurationClassUtils.checkConfigurationClassCandidate方法
+                    把拥有@Configuration、@Import、@Component、@ImportResource、@ComponentScan注解或者含有@Bean注解的方法的配置类（非接口或者注解）的配置信息转换为BeanDefinitionHolder放到configCandidates
+                    其中配置类有@configuration的BeanDefinition设置属性org.springframework.context.annotation.ConfigurationClassPostProcessor.configurationClass=full
+                    其他为lite
+
+                把configCandidates放到candidates，list转set
+                while(candidates不为空)
+                {
+                    使用ConfigurationClassParser.parse(Set<BeanDefinitionHolder> configCandidates)解析所有的candidates
+                    {
+                        ...
+                        {
+                            ConfigurationClassParser.processConfigurationClass(ConfigurationClass configClass)
+                            {
+                                通过配置类@Conditional注解（若有）判断是否跳过解析
+
+                                从ConfigurationClassParser.configurationClasses(ConfigurationClass configClass)中查找configClass
+                                若有，判断需要解析的configClass是否通过@Import注解解析过了
+                                        若是，判断已存在的configClass是否通过@Import注解解析过了，
+                                                若是，把需要解析的configClass的importedBy添加到已有的中
+                                                否则，return
+                                        否则，删掉configurationClasses和knownSuperclasses中已存在的configClass
+
+                                通过configClass转换为SourceClass
+                                {
+                                    doProcessConfigurationClass(configClass, sourceClass)
+                                    {
+                                        processMemberClasses(configClass, sourceClass)
+                                        {
+                                            获得configClass除去父类的内部类
+                                            遍历所有的内部类（SourceClass）
+                                            {
+                                                用ConfigurationClassUtils.isConfigurationCandidate判断内部类是否拥有@Configuration、@Import、@Component、@ImportResource、@ComponentScan注解或者含有@Bean注解的方法
+                                                    并且内部类的类名(SourceClass.getMetadata().getClassName())不等于configClass的类名（避免循环导入问题）
+                                                    若否，抛出异常
+                                                    若是
+                                                    {
+                                                        把configClass push到importStack
+                                                        使用processConfigurationClass(memberClass.asConfigClass(configClass))方法递归
+                                                            导入配置类
+                                                        pop importStack
+                                                    }
+                                            }
+                                        }
+
+                                        处理@PropertySource注解，如果有，把解析得到的相关信息放到AbstractApplicationContext.envirment.propertySources中
+                                        处理@ComponentScan注解，扫描所有拥有@Component注解的类或者拥有“拥有@Component注解的注解”的类，并将这些类注册到ioc容器中
+                                        处理@Import注解...
+                                        处理@ImportResource注解...
+                                        处理配置类中带有@Bean注解的方法
+                                        处理配置类接口中带有@Bean注解的方法
+                                        处理配置类父类中带有@Bean注解的方法，父类全类名不能以java开头
+                                            并且ConfigurationClassParser.knownSuperclasses中不能有它的全类名，处理时会push进此类名，避免重复导入
+                                            若拥有可导入的父类，把它作为返回值返回到方法外
+                                        //⭐⭐⭐有些处理会在beanfactory中注册BeanDefinition，有些处理只会把信息保存在ConfigurationClass，并未开始注册，
+                                            具体过程以后再补
+                                    }
+                                    若返回值不为null，继续循环执行上述方法，直到没有父类可以导入为止
+                                }
+                                把configClass放进configurationClasses
+                            }
+                        }
+                        ...
+
+                        处理推迟的ImportSelectors
+                    }
+
+                    parser.validate()校验带有@Configuration注解的配置类，是否带有final修饰符，若是，抛出异常；否则继续判断是否带有@Bean注解的方法，
+                        若是，判断该方法是static方法吗？若是，return，否则判断是否非static方法、有final和private修饰，若是，抛出异常。
+                        （配置类和这些方法都必须是Overridable，即可被继承和重写，使cglib可以正常使用）
+
+                    把parser解析完的所有类保存到configClasses
+
+                    去除configClasses中在alreadyParsed（一开始为空集合）含有的ConfigurationClass
+
+                    创建ConfigurationClassBeanDefinitionReader
+                    ConfigurationClassBeanDefinitionReader.loadBeanDefinitions(configClasses)，把所有ConfigurationClass转换成各种BeanDefinition
+                    {
+                        ...详情以后补
+                    }
+
+                    把所有转换过的configClasses添加到alreadyParsed
+
+                    把candidates清空
+
+                    如果registry.getBeanDefinitionCount() > candidateNames.length，parse和loadBeanDefinitions方法可能会增加BeanDefinition
+                    {
+                        通过registry.getBeanDefinitionNames()获得新的BeanDefinitionNames，排除alreadyParsed和一开始获取的candidateNames,
+                            把新的BeanDefinition转换成BeanDefinitionHolder后添加到candidates，把新的candidateNames替换旧的candidateNames，继续循环
+                    }
+                }
+                如果beanfactory没有则注册单实例bean ImportRegistry
+
+                如果metadataReaderFactory instanceof CachingMetadataReaderFactory，CachingMetadataReaderFactory.clearCache()
+            }
+        }
+        2）如果beanFactory没有名为"loadTimeWeaver"的bean并且tempClassLoader==null，则创建他们
+    }
+    3.6、initMessageSource() 初始化MessageSource（国际化文件支持的基础接口），详细内容不展开
+    3.7、onRefresh() 空方法，留给AbstractApplicationContext子类使用
+    3.8、registerListeners()
+    {
+        1)为AbstractApplicationContext中的applicationEventMulticaster添加ApplicationListener
+        2)触发earlyApplicationEvents里的所有event
+    }
+    3.9、finishBeanFactoryInitialization(beanFactory)
+    {
+        1）查找名为"conversionService"的bean，如果类型是ConversionService，把它设置为beanFactory的conversionService
+            ConversionService：spring类型转换接口
+        2）判断beanFactory的embeddedValueResolvers是否为空，是就加一个新建的StringValueResolver,用于解析表达式
+        {
+            ...可能补
+        }
+        3）使用DefaultListableBeanFactory.getBean()对LoadTimeWeaverAware类型的bean进行初始化
+        4）停止使用beanfactory.TempClassLoader进行类型匹配，把值设置为null
+        5）保存当前所有的beanDefinitionNames到beanFactory的frozenBeanDefinitionNames
+        6）DefaultListableBeanFactory.preInstantiateSingletons实例化剩下的非lazy单实例bean{...可能补}
+    }
+    3.10、finishRefresh()
+    {
+        1）初始化lifecycleProcessor，从beanfactory取出，如果没有新建一个DefaultLifecycleProcessor并注册到beanfactory。
+
+        2）getLifecycleProcessor().onRefresh()
+        {
+            获取所有的Lifecycle类型的bean，以这些bean中的phase进行分类变成LifecycleGroup里的members，按phase大小顺序执行这些LifecycleGroup，
+                执行LifecycleGroup时,members按顺序执行
+                DefaultLifecycleProcessor#doStart(Map<String, ? extends Lifecycle> lifecycleBeans, String beanName, boolean autoStartupOnly)
+                {
+                    从lifecycleBeans中移除这个bean
+
+                    从beanfactory中找到Map<String, Set<String>> dependenciesForBeanMap中以执行member的名字为key的set，
+                    再通过这些set里面的beannames找到这个bean所依赖的其他LifecycleBean，在遍历递归调用doStart方法
+
+                    执行完所有依赖的bean才调用Lifecycle#start()开始执行
+                }
+        }
+        3）publishEvent(new ContextRefreshedEvent(this))发布事件
+        4）LiveBeansView.registerApplicationContext(this)注册当前的context到LiveBeansView，不知道有什么用
+    }
+    3.11、resetCommonCaches()清除缓存
+
+===================================================================================================
+
+AbstractBeanFactory#getBean(String name)的过程
+{
+    AbstractBeanFactory#doGetBean(final String name, final Class<T> requiredType, final Object[] args, boolean typeCheckOnly)
+                                 (name, null, null, false)
+    {
+        1、翻译name，看看是否带“&”开头或者是否为别名
+        2、//试图在缓存中获取它的单实例的bean
+        DefaultSingletonBeanRegistry#getSingleton(String beanName, boolean allowEarlyReference)
+                                                             (beanName, true)
+        {
+            从singletonObjects集合中获取名为beanName的singletonObject
+
+            如果为null并且singletonsCurrentlyInCreation中含有beanName（表示这个singletonObject正在创建中），对singletonObjects加锁
+            {
+                在earlySingletonObjects集合中获取singletonObject
+                如果结果为null并且参数allowEarlyReference为true
+                {
+                    在singletonFactories集合中获取ObjectFactory<?>，这个类型可以通过getObject()方法得到singletonObject
+                    如果结果不是null
+                    {
+                        通过getObject()方法获取singletonObject  //对象已经实例化，并未对属性赋值
+                        earlySingletonObjects.put(beanName, singletonObject)   //实例化后的对象放进earlySingletonObjects
+                        singletonFactories.remove(beanName)   //这个factory的使命已经完成，去除它
+                    }
+                }
+                最后返回null或singletonObject
+            }
+        }
+        3、用变量sharedInstance接受这个结果（如果不为空，说明正在循环引用中）
+
+        4、
+        {
+            如果sharedInstance != null并且参数args == null
+            {
+                protected Object getObjectForBeanInstance(Object beanInstance, String name, String beanName, RootBeanDefinition mbd)
+                                                         (sharedInstance, name, beanName, null)
+                {
+                    ...补
+                }
+            }
+            否则
+            {
+                用isPrototypeCurrentlyInCreation(String beanName)（即prototypesCurrentlyInCreation变量）
+                    判断这个bean是否正在被创建，如果是，抛出异常，主要针对Prototype Bean
+                获取parentBeanFactory
+                如果parentBeanFactory不为null并且当前BeanFactory的beanDefinitionMap没有找到这个beanName的BeanDefinition，
+                    则从parentBeanFactory中getBean
+                如果typeCheckOnly==false，markBeanAsCreated(String beanName){...}
+                通过getMergedLocalBeanDefinition(beanName){...补}获得已经合并了的BeanDefinition mbd
+                如果mbd的abstractFlag==true的，抛出异常
+                mbd通过getDependsOn()获得所有@DependsOn注解中的beanName，遍历它们，检查它们时候有依赖当前get的这个bean，如果有，抛出异常
+                    若没有
+                    {
+                        DefaultSingletonBeanRegistry#registerDependentBean(String beanName, String dependentBeanName)
+                                                                          (beanName, dep)
+                        //在dependentBeanMap和dependenciesForBeanMap中添加他们的对应关系，并非注册beanDefinition，他们的类型都是ConcurrentHashMap<String, Set<String>>
+                        //dependentBeanMap：key为被依赖的beanName，value为依赖这个被依赖beanName的所有beanName集合
+                        //dependenciesForBeanMap：key为普通的beanName，value为这个bean依赖的所有beanName集合
+                        并通过getBean(dep)创建这些依赖bean
+                    }
+
+                {
+                    如果bean是单实例的
+                    {
+                        DefaultSingletonBeanRegistry#getSingleton(String beanName, ObjectFactory<?> singletonFactory)
+                        //参数singletonFactory是一个匿名内部类，重写的getObject方法使用了AbstractAutowireCapableBeanFactory#createBean(String beanName, RootBeanDefinition mbd, Object[] args)
+                        {
+                            给singletonObjects加锁
+                            {
+                                判断singletonObjects中是否含有bean了，防止重复创建
+                                DefaultSingletonBeanRegistry#beforeSingletonCreation(String beanName)
+                                {
+                                    DefaultSingletonBeanRegistry.inCreationCheckExclusions中不能含有beanName，否则抛异常
+                                    向singletonsCurrentlyInCreation添加beanName，如果返回false
+                                        （即已经存在beanName，该bean正在被创建，应该是构造器注入导致的循环引用问题），抛异常
+                                }
+                                singletonFactory.getObject()，内部类重写的方法创建bean
+                                    即AbstractAutowireCapableBeanFactory#createBean(String beanName, RootBeanDefinition mbd, Object[] args)
+
+                                //检查inCreationCheckExclusions中是否存在beanName，去除singletonsCurrentlyInCreation中的beanName
+                                afterSingletonCreation(String beanName)
+
+                                //在singletonObjects中添加<beanName,bean>，在registeredSingletons中添加bean
+                                //remove其他两个缓存singletonFactories和earlySingletonObjects中的beanName的值
+                                addSingleton(String beanName, Object singletonObject)
+
+                                返回bean
+                            }
+                        }
+
+                        bean = AbstractBeanFactory#getObjectForBeanInstance(
+                        			Object beanInstance, String name, String beanName, RootBeanDefinition mbd)
+                    }
+
+                    否则
+                    {
+
+                    }
+
+                }
+
+            }
+        }
+
+    }
+}
+
+========================================================================================
+AbstractAutowireCapableBeanFactory#createBean(String beanName, RootBeanDefinition mbd, Object[] args)
+{
+    通过mbd和beanName解析出bean的class类型
+    如果这个类型不为null并且mbd的beanClass不是Class类型的对象并且mbd的beanClass不为null，
+        把mbd复制成新的对象并把beanClass变量设置为解析的类型
+
+    调用mbd的AbstractBeanDefinition#prepareMethodOverrides()方法
+    //这里处理的是replace-method和lookup-method方法注入，并非@Override注解
+    {...补}
+
+    AbstractAutowireCapableBeanFactory#resolveBeforeInstantiation(String beanName, RootBeanDefinition mbd)
+    尝试通过代理生成bean                                         (beanName, mbdToUse)
+    {
+        如果RootBeanDefinition.beforeInstantiationResolved不为Boolean.False
+        {
+            如果mbd.synthetic不为false并且AbstractBeanFactory.hasInstantiationAwareBeanPostProcessors为true
+            {
+                根据beanName和mdb判断class类型，如果不为null
+                {
+                    bean=AbstractAutowireCapableBeanFactory#applyBeanPostProcessorsBeforeInstantiation
+                                                                (Class<?> beanClass, String beanName)
+                    //这是bean实例化之前执行的
+                    {
+                        获取AbstractBeanFactory.beanPostProcessors里面的InstantiationAwareBeanPostProcessor，
+                            顺序执行这些processor的postProcessBeforeInstantiation(Class<?> beanClass, String beanName)方法，
+                            若方法返回的结果不为null（说明这个bean已经被当前执行的processor实例化了），就不继续执行，直接返回这个bean
+                    }
+                    如果bean不为null
+                    {
+                        AbstractAutowireCapableBeanFactory#applyBeanPostProcessorsAfterInitialization
+                                                                (Object existingBean, String beanName)
+                        //这是bean初始化之后执行的
+                        {
+                            获取所有的beanPostProcessor，顺序执行postProcessAfterInitialization(Object bean, String beanName)
+                            如果执行方法返回的结果为null，直接返回null。
+                        }
+                    }
+                }
+            }
+            把mbd.beforeInstantiationResolved设置为（bean!=null）
+        }
+        返回bean
+    }
+
+    如果返回的bean不为null，直接返回bean
+
+    AbstractAutowireCapableBeanFactory#doCreateBean(final String beanName, final RootBeanDefinition mbd, final Object[] args)
+    //创建bean
+    {
+        如果这个mbd是单实例的，从AbstractAutowireCapableBeanFactory.factoryBeanInstanceCache中remove key为beanName的值，
+            把这个值放进BeanWrapper instanceWrapper
+
+        如果instanceWrapper为null，
+            AbstractAutowireCapableBeanFactory#createBeanInstance
+                                                (String beanName, RootBeanDefinition mbd, Object[] args)
+            {
+               instanceWrapper = AbstractAutowireCapableBeanFactory#createBeanInstance
+                                        (String beanName, RootBeanDefinition mbd, Object[] args)
+               {
+                    ⭐⭐⭐有三种创建方法：工厂方法，构造器自动装配和简单的构造，选择合适的方法创建bean
+                    ...补
+               }
+            }
+
+        如果instanceWrapper不为null,从instanceWrapper中获取bean
+
+        使用instanceWrapper.getWrappedClass()（如果不为null）获取并更新mbd.resolvedTargetType的值
+
+        给mbd.postProcessingLock加锁
+        {
+            如果mbd.postProcessed不为true
+            {
+                AbstractAutowireCapableBeanFactory#applyMergedBeanDefinitionPostProcessors(RootBeanDefinition mbd, Class<?> beanType, String beanName)
+                //执行所有的AbstractBeanFactory.beanPostProcessors的postProcessMergedBeanDefinition方法
+
+                mbd.postProcessed设为true
+            }
+        }
+
+
+        如果允许提前暴露（即mbd是单实例的、并且当前beanFactory.allowCircularReferences为true（bean工厂允许循环引用）、
+            并且singletonsCurrentlyInCreation为true（当前单实例bean正在被创建））
+        {
+            //添加当前bean的beanFactory到singletonFactory，提前暴露bean，解决循环引用
+            DefaultSingletonBeanRegistry#addSingletonFactory(String beanName, ObjectFactory<?> singletonFactory)
+            //参数singletonFactory传进去的是一个ObjectFactory<Object>的匿名接口，该接口实现了Object getObject()方法，
+                方法里面调用了AbstractAutowireCapableBeanFactory#getEarlyBeanReference
+                                                (String beanName, RootBeanDefinition mbd, Object bean)
+                                                { ...补 }
+            {
+                给singletonObjects加锁
+                {
+                    如果DefaultSingletonBeanRegistry#singletonObjects中没有key为beanName的值
+                    {
+                        往DefaultSingletonBeanRegistry.singletonFactories里面添加<beanName,ObjectFactory>
+                        移除DefaultSingletonBeanRegistry.earlySingletonObjects中key为beanName的值
+                        在DefaultSingletonBeanRegistry.registeredSingletons集合中添加beanName
+                    }
+                }
+            }
+        }
+
+        //开始给bean的属性赋值
+        AbstractAutowireCapableBeanFactory#populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper bw)
+        {
+            获取mbd.propertyValues
+            如果bw为null，return
+            如果mbd.synthetic为false并且AbstractBeanFactory.hasInstantiationAwareBeanPostProcessors为true
+                执行InstantiationAwareBeanPostProcessor#postProcessAfterInstantiation(Object bean, String beanName)
+                    如果返回false，return
+
+            根据autowireMode进行属性注入，默认不使用这种方法进行属性注入。
+                可以配置，参考AutowireCapableBeanFactory.AUTOWIRE_AUTODETECT等值
+
+            如果hasInstantiationAwareBeanPostProcessors为true或者需要对bean进行依赖检查
+            {
+                //获取bean的所有属性相关信息封装成PropertyDescriptor[]，期间可以把它们缓存到AbstractAutowireCapableBeanFactory.filteredPropertyDescriptorsCache
+                AbstractAutowireCapableBeanFactory#filterPropertyDescriptorsForDependencyCheck(BeanWrapper bw, boolean cache)
+
+                执行processor的postProcessPropertyValues方法进行属性赋值
+                    ⭐⭐⭐其中AutowiredAnnotationBeanPostProcessor负责对@Autowired注解的属性赋值
+                        {
+                            如果属性是一个bean，如果是singleton，直接获取；
+                            如果是prototype，使用beanFactory#getBean方法创建
+                            或许补...
+                        }
+                    如果该方法返回null，return
+
+                进行依赖检查（检查bean的属性是否设定完成，默认不进行检查，
+                    可以参考RootBeanDefinition.DEPENDENCY_CHECK_NONE等值）
+
+            }
+            最后把PropertyValues的值注入到bean中
+        }
+
+        //初始化bean
+        exposedObject = AbstractAutowireCapableBeanFactory#initializeBean
+                    (final String beanName, final Object bean, RootBeanDefinition mbd)
+        {
+            invokeAwareMethods(final String beanName, final Object bean)
+
+            执行beanProcessor的postProcessBeforeInitialization方法
+
+            invokeInitMethods(String beanName, final Object bean, RootBeanDefinition mbd)
+
+            执行beanProcessor的postProcessAfterInitialization方法
+
+            返回bean
+        }
+
+        如果允许提前暴露
+        {
+            //从singletonObjects和earlySingletonObjects中寻找bean
+            earlySingletonReference = getSingleton(beanName, false)
+
+            如果earlySingletonReference不为null
+            //说明存在循环引用，因为在处理@Autowired自动注入别的bean中引用了当前bean，
+              singletonFactory中当前bean的值已经被放到earlySingletonObjects或singletonObjects中了
+            {
+                如果初始化后的exposedObject和初始化之前的bean是同一个对象（exposedObject可能变成了一个代理对象）
+                    exposedObject = earlySingletonReference;
+
+                否则
+                {
+                    获取所有依赖当前bean的beans
+                    筛选掉类型检查而创建的bean，并在缓存中删除这些bean
+                    如果还有剩下的bean，说明这些剩下的bean已经实例化并且已经注入过当前的bean了，而这时
+                        exposedObject跟bean不是同一个对象，最终返回的是exposedObject，而其他类注入的是bean，
+                        单实例的bean最终造成了冲突，抛出异常
+                }
+            }
+        }
+
+        注册可销毁的bean到disposableBeans中
+
+        返回exposedObject
+    }
+
+}
+
+===================================================================================================
+AbstractBeanFactory#getObjectForBeanInstance(Object beanInstance, String name, String beanName, RootBeanDefinition mbd)
+{
+
+}
