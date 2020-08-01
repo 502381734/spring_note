@@ -263,7 +263,7 @@ AbstractBeanFactory#getBean(String name)的过程
                 如果parentBeanFactory不为null并且当前BeanFactory的beanDefinitionMap没有找到这个beanName的BeanDefinition，
                     则从parentBeanFactory中getBean
                 如果typeCheckOnly==false，markBeanAsCreated(String beanName){...}
-                通过getMergedLocalBeanDefinition(beanName){...补}获得已经合并了的BeanDefinition mbd
+                通过AbstractBeanFactory#getMergedLocalBeanDefinition(beanName){...补}获得已经合并了的BeanDefinition mbd
                 如果mbd的abstractFlag==true的，抛出异常
                 mbd通过getDependsOn()获得所有@DependsOn注解中的beanName，遍历它们，检查它们时候有依赖当前get的这个bean，如果有，抛出异常
                     若没有
@@ -305,18 +305,32 @@ AbstractBeanFactory#getBean(String name)的过程
                             }
                         }
 
+                        //如果bean是一个factoryBean，则获取真实的bean
                         bean = AbstractBeanFactory#getObjectForBeanInstance(
                         			Object beanInstance, String name, String beanName, RootBeanDefinition mbd)
                     }
 
-                    否则
+                    否则，如果是prototype
                     {
+                        beforePrototypeCreation(String beanName){...}
 
+                        createBean(beanName, mbd, args)
+
+                        afterPrototypeCreation(beanName){...}
+
+                        bean = getObjectForBeanInstance(prototypeInstance, name, beanName, mbd)
                     }
+
+                    否则
+                        {...可能补}
 
                 }
 
             }
+
+            检查bean是否符合需要的Class类型，如果不是尝试转换，转换失败时抛异常{...}
+
+            返回bean
         }
 
     }
@@ -338,7 +352,8 @@ AbstractAutowireCapableBeanFactory#createBean(String beanName, RootBeanDefinitio
     {
         如果RootBeanDefinition.beforeInstantiationResolved不为Boolean.False
         {
-            如果mbd.synthetic不为false并且AbstractBeanFactory.hasInstantiationAwareBeanPostProcessors为true
+            如果mbd.synthetic为false并且AbstractBeanFactory.hasInstantiationAwareBeanPostProcessors为true
+            //synthetic如果为true，则不会受到BeanPostProcessor的作用
             {
                 根据beanName和mdb判断class类型，如果不为null
                 {
@@ -506,5 +521,31 @@ AbstractAutowireCapableBeanFactory#createBean(String beanName, RootBeanDefinitio
 ===================================================================================================
 AbstractBeanFactory#getObjectForBeanInstance(Object beanInstance, String name, String beanName, RootBeanDefinition mbd)
 {
+    检查beanName不为null且以"&"开头，并且不是FactoryBean
+        是，抛异常
+
+    如果bean不是FactoryBean
+        直接返回bean
+
+    定义一个object
+    如果mbd为null，
+        尝试从factoryBeanObjectCache获取factoryBean赋值给object
+
+    如果object为null
+    {
+        如果mbd为null且beanDefinitionMap有beanName的key
+            //目前已知这种情况在AbstractApplicationContext.getBean(String beanName)的时候出现，它调用了
+            //    AbstractApplicationContext#doGetBean
+            //                (final String name, final Class<T> requiredType, final Object[] args, boolean typeCheckOnly)
+            //                (name, null, null, false)
+            AbstractBeanFactory#getMergedLocalBeanDefinition(beanName)获取合并的mbd
+
+        //创建bean
+        FactoryBeanRegistrySupport#getObjectFromFactoryBean(FactoryBean<?> factory, String beanName, boolean shouldPostProcess)
+        {...补}
+
+        返回bean
+    }
+
 
 }

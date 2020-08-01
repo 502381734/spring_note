@@ -25,6 +25,11 @@ public class test {
         Animal createAnimal2 = testLookup.createAnimal();
 
 
+        //获取单实例的factorybean
+        TestFactoryBean testFactoryBean = (TestFactoryBean) context.getBean("testFactoryBean");
+        TestFactoryBean testFactoryBean2 = (TestFactoryBean) context.getBean("&testFactoryBean");
+        TestFactoryBean testFactoryBean3 = (TestFactoryBean) context.getBean("&testFactoryBean");
+
         String[] names = context.getBeanDefinitionNames();
         for(String name : names)
             System.out.println(name);
