@@ -16,13 +16,13 @@ public class TestBeanPostProcessor implements BeanPostProcessor {
 
     public Object postProcessBeforeInitialization(Object o, String s) throws BeansException {
         if (o instanceof Animal)
-            System.out.println("postProcessBeforeInitialization.....");
+            System.out.println(o.getClass().getSimpleName() + " postProcessBeforeInitialization.....");
         return o;
     }
 
     public Object postProcessAfterInitialization(Object o, String s) throws BeansException {
         if (o instanceof Animal)
-            System.out.println("postProcessAfterInitialization....");
+            System.out.println(o.getClass().getSimpleName() + " postProcessAfterInitialization....");
         return o;
     }
 }

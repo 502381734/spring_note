@@ -96,24 +96,24 @@ public class Animal implements InitializingBean, DisposableBean, ApplicationCont
 
 
     public void destroy() throws Exception {
-        System.out.println("destroy......");
+        System.out.println("Animal destroy......");
     }
 
     public void afterPropertiesSet() throws Exception {
-        System.out.println("afterPropertiesSet....");
+        System.out.println("Animal afterPropertiesSet....");
     }
 
     public void init() {
-        System.out.println("init method....");
+        System.out.println("Animal init method....");
     }
 
     public void des() {
-        System.out.println("destory method.....");
+        System.out.println("Animal destory method.....");
     }
 
     @PostConstruct
     public void postConstuct() {
-        System.out.println("postConstuct");
+        System.out.println("Animal postConstuct");
     }
 
     @PreDestroy

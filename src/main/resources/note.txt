@@ -68,104 +68,110 @@ new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
         1）⭐⭐⭐PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors())
         {
             注册beanFactory的beanFactoryPostProcessors（按顺序执行实现了PriorityOrdered接口、实现了Ordered接口和没有实现接口的BeanFactoryPostProcessor、最后执行剩余的BeanFactoryPostProcessor的postProcessBeanDefinitionRegistry方法）
-            在这个过程中调用了BeanDefinitionRegistryPostProcessor.postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry)方法,大致过程如下：
-            //通过beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class)获得PostProcessor，getBean过程以后再补
+            在这个过程中调用了BeanDefinitionRegistryPostProcessor.postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry)方法
+            //通过beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class)获得PostProcessor
             {
-                把beanfactory的所有注册的beanname保存到candidateNames
-                获取registry(DefaultListableBeanFactory)的所有已经注册的BeanDefinition，通过ConfigurationClassUtils.checkConfigurationClassCandidate方法
-                    把拥有@Configuration、@Import、@Component、@ImportResource、@ComponentScan注解或者含有@Bean注解的方法的配置类（非接口或者注解）的配置信息转换为BeanDefinitionHolder放到configCandidates
-                    其中配置类有@configuration的BeanDefinition设置属性org.springframework.context.annotation.ConfigurationClassPostProcessor.configurationClass=full
-                    其他为lite
-
-                把configCandidates放到candidates，list转set
-                while(candidates不为空)
+                ...
+                ConfigurationClassPostProcessor#processConfigBeanDefinitions(BeanDefinitionRegistry registry)
                 {
-                    使用ConfigurationClassParser.parse(Set<BeanDefinitionHolder> configCandidates)解析所有的candidates
+                    把beanfactory的所有注册的beanname保存到candidateNames
+                    获取registry(DefaultListableBeanFactory)的所有已经注册的BeanDefinition，通过ConfigurationClassUtils.checkConfigurationClassCandidate方法
+                        把拥有@Configuration、@Import、@Component、@ImportResource、@ComponentScan注解或者含有@Bean注解的方法的配置类（非接口或者注解）的配置信息转换为BeanDefinitionHolder放到configCandidates
+                        其中配置类有@configuration的BeanDefinition设置属性org.springframework.context.annotation.ConfigurationClassPostProcessor.configurationClass=full
+                        其他为lite
+
+                    把configCandidates放到candidates，list转set
+                    while(candidates不为空)
                     {
-                        ...
+                        使用ConfigurationClassParser#parse(Set<BeanDefinitionHolder> configCandidates)解析所有的candidates
                         {
-                            ConfigurationClassParser.processConfigurationClass(ConfigurationClass configClass)
+                            ...
                             {
-                                通过配置类@Conditional注解（若有）判断是否跳过解析
-
-                                从ConfigurationClassParser.configurationClasses(ConfigurationClass configClass)中查找configClass
-                                若有，判断需要解析的configClass是否通过@Import注解解析过了
-                                        若是，判断已存在的configClass是否通过@Import注解解析过了，
-                                                若是，把需要解析的configClass的importedBy添加到已有的中
-                                                否则，return
-                                        否则，删掉configurationClasses和knownSuperclasses中已存在的configClass
-
-                                通过configClass转换为SourceClass
+                                ConfigurationClassParser#processConfigurationClass(ConfigurationClass configClass)
                                 {
-                                    doProcessConfigurationClass(configClass, sourceClass)
+                                    通过配置类@Conditional注解（若有）判断是否跳过解析
+
+                                    从ConfigurationClassParser#configurationClasses(ConfigurationClass configClass)中查找configClass
+                                    若有，判断需要解析的configClass是否通过@Import注解解析过了
+                                            若是，判断已存在的configClass是否通过@Import注解解析过了，
+                                                    若是，把需要解析的configClass的importedBy添加到已有的中
+                                                    否则，return
+                                            否则，删掉configurationClasses和knownSuperclasses中已存在的configClass
+
+                                    通过configClass转换为SourceClass
                                     {
-                                        processMemberClasses(configClass, sourceClass)
+                                        doProcessConfigurationClass(configClass, sourceClass)
                                         {
-                                            获得configClass除去父类的内部类
-                                            遍历所有的内部类（SourceClass）
+                                            processMemberClasses(configClass, sourceClass)
                                             {
-                                                用ConfigurationClassUtils.isConfigurationCandidate判断内部类是否拥有@Configuration、@Import、@Component、@ImportResource、@ComponentScan注解或者含有@Bean注解的方法
-                                                    并且内部类的类名(SourceClass.getMetadata().getClassName())不等于configClass的类名（避免循环导入问题）
-                                                    若否，抛出异常
-                                                    若是
-                                                    {
-                                                        把configClass push到importStack
-                                                        使用processConfigurationClass(memberClass.asConfigClass(configClass))方法递归
-                                                            导入配置类
-                                                        pop importStack
-                                                    }
+                                                获得configClass除去父类的内部类
+                                                遍历所有的内部类（SourceClass）
+                                                {
+                                                    用ConfigurationClassUtils.isConfigurationCandidate判断内部类是否拥有@Configuration、@Import、@Component、@ImportResource、@ComponentScan注解或者含有@Bean注解的方法
+                                                        并且内部类的类名(SourceClass.getMetadata().getClassName())不等于configClass的类名（避免循环导入问题）
+                                                        若否，抛出异常
+                                                        若是
+                                                        {
+                                                            把configClass push到importStack
+                                                            使用processConfigurationClass(memberClass.asConfigClass(configClass))方法递归
+                                                                导入配置类
+                                                            pop importStack
+                                                        }
+                                                }
                                             }
+
+                                            处理@PropertySource注解，如果有，把解析得到的相关信息放到AbstractApplicationContext.envirment.propertySources中
+                                            处理@ComponentScan注解，扫描所有拥有@Component注解的类或者拥有“拥有@Component注解的注解”的类，并将这些类注册到ioc容器中
+                                            处理@Import注解...
+                                            处理@ImportResource注解...
+                                            处理配置类中带有@Bean注解的方法
+                                            处理配置类接口中带有@Bean注解的方法
+                                            处理配置类父类中带有@Bean注解的方法，父类全类名不能以java开头
+                                                并且ConfigurationClassParser.knownSuperclasses中不能有它的全类名，处理时会push进此类名，避免重复导入
+                                                若拥有可导入的父类，把它作为返回值返回到方法外
+                                            //⭐⭐⭐有些处理会在beanfactory中注册BeanDefinition，有些处理只会把信息保存在ConfigurationClass，并未开始注册，
+                                                具体过程以后再补
                                         }
-
-                                        处理@PropertySource注解，如果有，把解析得到的相关信息放到AbstractApplicationContext.envirment.propertySources中
-                                        处理@ComponentScan注解，扫描所有拥有@Component注解的类或者拥有“拥有@Component注解的注解”的类，并将这些类注册到ioc容器中
-                                        处理@Import注解...
-                                        处理@ImportResource注解...
-                                        处理配置类中带有@Bean注解的方法
-                                        处理配置类接口中带有@Bean注解的方法
-                                        处理配置类父类中带有@Bean注解的方法，父类全类名不能以java开头
-                                            并且ConfigurationClassParser.knownSuperclasses中不能有它的全类名，处理时会push进此类名，避免重复导入
-                                            若拥有可导入的父类，把它作为返回值返回到方法外
-                                        //⭐⭐⭐有些处理会在beanfactory中注册BeanDefinition，有些处理只会把信息保存在ConfigurationClass，并未开始注册，
-                                            具体过程以后再补
+                                        若返回值不为null，继续循环执行上述方法，直到没有父类可以导入为止
                                     }
-                                    若返回值不为null，继续循环执行上述方法，直到没有父类可以导入为止
+                                    把configClass放进configurationClasses
                                 }
-                                把configClass放进configurationClasses
                             }
+                            ...
+
+                            处理推迟的ImportSelectors
                         }
-                        ...
 
-                        处理推迟的ImportSelectors
+                        parser.validate()校验带有@Configuration注解的配置类，是否带有final修饰符，若是，抛出异常；否则继续判断是否带有@Bean注解的方法，
+                            若是，判断该方法是static方法吗？若是，return，否则判断是否非static方法、有final和private修饰，若是，抛出异常。
+                            （配置类和这些方法都必须是Overridable，即可被继承和重写，使cglib可以正常使用）
+
+                        把parser解析完的所有类保存到configClasses
+
+                        去除configClasses中在alreadyParsed（一开始为空集合）含有的ConfigurationClass
+
+                        创建ConfigurationClassBeanDefinitionReader
+
+                        //把所有ConfigurationClass及其类中其他可以注册的类注册成BeanDefinition
+                        ⭐⭐⭐ConfigurationClassBeanDefinitionReader.loadBeanDefinitions(configClasses)
+                        {
+                            ...详情以后补
+                        }
+
+                        把所有转换过的configClasses添加到alreadyParsed
+
+                        把candidates清空
+
+                        如果registry.getBeanDefinitionCount() > candidateNames.length，parse和loadBeanDefinitions方法可能会增加BeanDefinition
+                        {
+                            通过registry.getBeanDefinitionNames()获得新的BeanDefinitionNames，排除alreadyParsed和一开始获取的candidateNames,
+                                把新的BeanDefinition转换成BeanDefinitionHolder后添加到candidates，把新的candidateNames替换旧的candidateNames，继续循环
+                        }
                     }
+                    如果beanfactory没有则注册单实例bean ImportRegistry
 
-                    parser.validate()校验带有@Configuration注解的配置类，是否带有final修饰符，若是，抛出异常；否则继续判断是否带有@Bean注解的方法，
-                        若是，判断该方法是static方法吗？若是，return，否则判断是否非static方法、有final和private修饰，若是，抛出异常。
-                        （配置类和这些方法都必须是Overridable，即可被继承和重写，使cglib可以正常使用）
-
-                    把parser解析完的所有类保存到configClasses
-
-                    去除configClasses中在alreadyParsed（一开始为空集合）含有的ConfigurationClass
-
-                    创建ConfigurationClassBeanDefinitionReader
-                    ConfigurationClassBeanDefinitionReader.loadBeanDefinitions(configClasses)，把所有ConfigurationClass转换成各种BeanDefinition
-                    {
-                        ...详情以后补
-                    }
-
-                    把所有转换过的configClasses添加到alreadyParsed
-
-                    把candidates清空
-
-                    如果registry.getBeanDefinitionCount() > candidateNames.length，parse和loadBeanDefinitions方法可能会增加BeanDefinition
-                    {
-                        通过registry.getBeanDefinitionNames()获得新的BeanDefinitionNames，排除alreadyParsed和一开始获取的candidateNames,
-                            把新的BeanDefinition转换成BeanDefinitionHolder后添加到candidates，把新的candidateNames替换旧的candidateNames，继续循环
-                    }
+                    如果metadataReaderFactory instanceof CachingMetadataReaderFactory，CachingMetadataReaderFactory.clearCache()
                 }
-                如果beanfactory没有则注册单实例bean ImportRegistry
-
-                如果metadataReaderFactory instanceof CachingMetadataReaderFactory，CachingMetadataReaderFactory.clearCache()
             }
         }
         2）如果beanFactory没有名为"loadTimeWeaver"的bean并且tempClassLoader==null，则创建他们
@@ -548,4 +554,44 @@ AbstractBeanFactory#getObjectForBeanInstance(Object beanInstance, String name, S
     }
 
 
+}
+
+=====================================================================================================
+AOP原理
+使用cglib给目标bean生成代理对象，使用CglibAopProxy$DynamicAdvisedInterceptor作为Callback进行方法拦截
+
+CglibAopProxy.DynamicAdvisedInterceptor#intercept
+{
+    ...
+    //根据调用的类和方法获取拦截器链
+    List<Object> chain = this.advised.getInterceptorsAndDynamicInterceptionAdvice(method, targetClass)
+
+    如果chain是空的，并且调用的方法是public的
+        直接调用方法
+    否则
+        新建一个CglibMethodInvocation对象(ReflectiveMethodInvocation的子类)，执行它的proceed()方法进行方法的调用
+        ReflectiveMethodInvocation#proceed()
+        {
+            如果currentInterceptorIndex等于拦截器数量 - 1（有一个拦截器不作用于目标方法）
+                invokeJoinpoint()执行方法
+
+            currentInterceptorIndex自增1
+
+            从interceptorsAndDynamicMethodMatchers获取拦截器
+
+            如果拦截器类型是InterceptorAndDynamicMethodMatcher
+            {
+                调用它的methodMatcher属性的matches(Method method, Class<?> targetClass, Object... args)方法去获取真正的拦截器
+                如果真正的拦截器不为null
+                    然后再调用真正拦截器的invoke(MethodInvocation invocation)
+                否则
+                    跳过当前拦截器，递归调用ReflectiveMethodInvocation#proceed()
+            }
+            否则
+                把拦截器转换成MethodInterceptor类型，调用它的invoke(MethodInvocation invocation)方法，
+                {
+                    在各自拦截器适合的地方递归调用ReflectiveMethodInvocation#proceed()方法
+                    ...
+                }
+        }
 }

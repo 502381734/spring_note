@@ -1,5 +1,6 @@
 package com.pack.bean;
 
+import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.*;
 
 /**
@@ -11,7 +12,7 @@ public class LogAspects {
     public LogAspects() {
     }
 
-    @Pointcut("execution(public int com.pack.bean.MathCaculator.*(..))")
+    @Pointcut("execution(public Integer com.pack.bean.MathCaculator.*(..))")
     public void pointcut(){}
 
     @Before("pointcut()")
@@ -26,7 +27,14 @@ public class LogAspects {
 
     @AfterReturning("pointcut()")
     public void returnLog(){
-        System.out.println("return");
+        System.out.println("After Returning");
+    }
+
+    @Around("pointcut()")
+    public void aroundLog(ProceedingJoinPoint joinPoint) throws Throwable {
+        System.out.println("start around");
+        joinPoint.proceed();
+        System.out.println("end around");
     }
 
     @AfterThrowing("pointcut()")

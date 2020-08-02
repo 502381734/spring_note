@@ -8,7 +8,8 @@ public class MathCaculator {
     public MathCaculator() {
     }
 
-    public int div(int a, int b){
+    public Integer div(int a, int b){
+        System.out.println("a/b");
         return a/b;
     }
 }
