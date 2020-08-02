@@ -1,5 +1,7 @@
 package com.pack.myinterface;
 
+import org.springframework.stereotype.Component;
+
 import java.lang.annotation.*;
 
 /**
@@ -8,7 +10,7 @@ import java.lang.annotation.*;
  */
 
 
-@HaveComponent
+@Component
 @Retention(RetentionPolicy.RUNTIME)
 public @interface HaveComponent {
 }

@@ -559,11 +559,11 @@ AbstractBeanFactory#getObjectForBeanInstance(Object beanInstance, String name, S
 =====================================================================================================
 AOP原理
 使用cglib给目标bean生成代理对象，使用CglibAopProxy$DynamicAdvisedInterceptor作为Callback进行方法拦截
-
+所有定义的@Apsect类中的方法都放在CglibAopProxy$DynamicAdvisedInterceptor的AdvisedSupport advised属性里
 CglibAopProxy.DynamicAdvisedInterceptor#intercept
 {
     ...
-    //根据调用的类和方法获取拦截器链
+    //在advised中根据调用的类和方法获取拦截器链
     List<Object> chain = this.advised.getInterceptorsAndDynamicInterceptionAdvice(method, targetClass)
 
     如果chain是空的，并且调用的方法是public的
