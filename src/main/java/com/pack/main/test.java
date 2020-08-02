@@ -2,6 +2,7 @@ package com.pack.main;
 
 import com.pack.bean.MathCaculator;
 import com.pack.configration.BeanConfig;
+import com.pack.service.TestService;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 /**
@@ -33,7 +34,8 @@ public class test {
         MathCaculator mathCaculator = (MathCaculator) context.getBean("mathCaculator");
         Integer r = mathCaculator.div(1, 1);
 
-
+        TestService service = (TestService) context.getBean("testService");
+        service.insert();
 
     }
 

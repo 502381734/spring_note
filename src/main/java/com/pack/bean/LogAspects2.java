@@ -11,10 +11,10 @@ import org.springframework.stereotype.Component;
 @Aspect
 @Component
 public class LogAspects2 {
-    @Pointcut("execution(public Integer com.pack.bean.MathCaculator.*(..))")
+    @Pointcut("execution(public void com.pack.service.TestService.insert(..))")
     public void pointcut(){}
 
-    @Before("execution(public Integer com.pack.bean.MathCaculator.*(..))")
+    @Before("pointcut())")
     public void beforeLog2(){
         System.out.println("before2");
     }
