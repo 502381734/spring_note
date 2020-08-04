@@ -5,6 +5,9 @@ package com.pack.bean;
  * @date 2020/3/18 21:39
  */
 public class MathCaculator {
+
+
+
     public MathCaculator() {
     }
 

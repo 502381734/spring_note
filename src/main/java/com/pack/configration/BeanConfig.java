@@ -72,6 +72,18 @@ public class BeanConfig implements BaseConfigImporter {
         return new LogAspects();
     }
 
+    @Lazy
+    @Bean
+    public CircleReference circleReference(){
+        return new CircleReference();
+    }
+
+    @Lazy
+    @Bean
+    public CircleReferenceWithAop circleReferenceWithAop(){
+        return new CircleReferenceWithAop();
+    }
+
     public BeanConfig() {
     }
 

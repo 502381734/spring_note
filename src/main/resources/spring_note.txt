@@ -503,7 +503,10 @@ AbstractAutowireCapableBeanFactory#createBean(String beanName, RootBeanDefinitio
             //说明存在循环引用，因为在处理@Autowired自动注入别的bean中引用了当前bean，
               singletonFactory中当前bean的值已经被放到earlySingletonObjects或singletonObjects中了
             {
-                如果初始化后的exposedObject和初始化之前的bean是同一个对象（exposedObject可能变成了一个代理对象）
+                如果初始化后的exposedObject和初始化之前的bean是同一个对象
+                //exposedObject可能被自定义的BeanPostProcessor修改，这是错误的操作，会抛异常
+                //正常情况下，exposedObject和bean必然是同一个对象：因为aop的processor对单实例的bean之创建一次代理对象，
+                //  如果有循环引用，aop会对循环内创建的bean进行代理，而不创建最外层的bean的代理，所以exposedObject和bean是同一个对象
                     exposedObject = earlySingletonReference;
 
                 否则
@@ -525,6 +528,7 @@ AbstractAutowireCapableBeanFactory#createBean(String beanName, RootBeanDefinitio
 }
 
 ===================================================================================================
+//如果beanInstance是代理对象，则获取真正的bean
 AbstractBeanFactory#getObjectForBeanInstance(Object beanInstance, String name, String beanName, RootBeanDefinition mbd)
 {
     检查beanName不为null且以"&"开头，并且不是FactoryBean

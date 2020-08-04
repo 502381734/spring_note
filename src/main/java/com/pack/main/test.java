@@ -1,8 +1,7 @@
 package com.pack.main;
 
-import com.pack.bean.MathCaculator;
+import com.pack.bean.CircleReferenceWithAop;
 import com.pack.configration.BeanConfig;
-import com.pack.service.TestService;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 /**
@@ -31,12 +30,14 @@ public class test {
 //        TestFactoryBean testFactoryBean3 = (TestFactoryBean) context.getBean("&testFactoryBean");
 
         //测试aop
-        MathCaculator mathCaculator = (MathCaculator) context.getBean("mathCaculator");
-        Integer r = mathCaculator.div(1, 1);
+//        MathCaculator mathCaculator = (MathCaculator) context.getBean("mathCaculator");
+//        Integer r = mathCaculator.div(1, 1);
 
-        TestService service = (TestService) context.getBean("testService");
-        service.insert();
+        //测试带aop的循环引用
+        CircleReferenceWithAop circle = (CircleReferenceWithAop) context.getBean("circleReferenceWithAop");
 
+
+        return;
     }
 
 
