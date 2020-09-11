@@ -1,6 +1,7 @@
 new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
 
-1、AnnotationConfigApplicationContext()  调用自身空构造函数，创建实例，在创建过程中调用父类GenericApplicationContext构造函数时创建了BeanFactory
+1、AnnotationConfigApplicationContext()  调用自身空构造函数，创建实例，
+    在创建过程中调用父类GenericApplicationContext构造函数时创建了BeanFactory
     {
         1.1、new AnnotatedBeanDefinitionReader(AnnotationConfigApplicationContext)创建AnnotatedBeanDefinitionReader实例
         {
@@ -28,7 +29,7 @@ new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
             ...
         }
     }
-2、register(annotatedClasses)注册配置类
+2、register(annotatedClasses)解析并注册配置类到beanDefinitionMap
     2.1、reader.register(annotatedClasses) 遍历注册每个配置类
     {
 		内部调用了context的reader.registerBean(Class<?> annotatedClass, String name, Class<? extends Annotation>... qualifiers)
@@ -53,7 +54,7 @@ new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
     3.3、prepareBeanFactory(ConfigurableListableBeanFactory beanFactory)
     {
     .......细节需要展开
-        设置beanFactory的beanClassLoader、beanExpressionResolver、ropertyEditorRegistrar
+        设置beanFactory的beanClassLoader、beanExpressionResolver（用于解析spel）、ropertyEditorRegistrar
         添加BeanPostProcessor：ApplicationContextAwareProcessor
         设置忽略的Interface：EnvironmentAware、EmbeddedValueResolverAware、ResourceLoaderAware、ApplicationEventPublisherAware、
         MessageSourceAware、ApplicationContextAware
@@ -65,27 +66,41 @@ new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
     3.4、postProcessBeanFactory(beanFactory);留给子类使用的空方法
     3.5、invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory);
     {
-        1）⭐⭐⭐PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors())
+        1）PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors())
         {
             注册beanFactory的beanFactoryPostProcessors（按顺序执行实现了PriorityOrdered接口、实现了Ordered接口和没有实现接口的BeanFactoryPostProcessor、最后执行剩余的BeanFactoryPostProcessor的postProcessBeanDefinitionRegistry方法）
             在这个过程中调用了BeanDefinitionRegistryPostProcessor.postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry)方法
             //通过beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class)获得PostProcessor
             {
                 ...
-                ConfigurationClassPostProcessor#processConfigBeanDefinitions(BeanDefinitionRegistry registry)
+
+                //BeanName:org.springframework.context.annotation.internalConfigurationAnnotationProcessor
+                ⭐⭐⭐ConfigurationClassPostProcessor#processConfigBeanDefinitions(BeanDefinitionRegistry registry)
                 {
-                    把beanfactory的所有注册的beanname保存到candidateNames
+                    把beanfactory的所有注册的beanname保存到candidateNames（默认只有context内部创建的processor和eventListenerFactory，再加上自己添加进去的配置类）
+
+                    //目的是把配置类都找出来放进集合中
                     获取registry(DefaultListableBeanFactory)的所有已经注册的BeanDefinition，通过ConfigurationClassUtils.checkConfigurationClassCandidate方法
                         把拥有@Configuration、@Import、@Component、@ImportResource、@ComponentScan注解或者含有@Bean注解的方法的配置类（非接口或者注解）的配置信息转换为BeanDefinitionHolder放到configCandidates
                         其中配置类有@configuration的BeanDefinition设置属性org.springframework.context.annotation.ConfigurationClassPostProcessor.configurationClass=full
                         其他为lite
 
-                    把configCandidates放到candidates，list转set
+                    如果没有配置类
+                        return
+
+                    把集合中的配置类按照Order优先级排序
+
+                    尝试一下查找并设置beanName生成器
+
+                    床架ConfigurationClassParser parser准备解析candidates
+
+                    把configCandidates放到candidates（list转set）
+
                     while(candidates不为空)
                     {
                         使用ConfigurationClassParser#parse(Set<BeanDefinitionHolder> configCandidates)解析所有的candidates
                         {
-                            ...
+                            根据注解方式的、xml的方式等分别进行解析...
                             {
                                 ConfigurationClassParser#processConfigurationClass(ConfigurationClass configClass)
                                 {
@@ -176,14 +191,15 @@ new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
         }
         2）如果beanFactory没有名为"loadTimeWeaver"的bean并且tempClassLoader==null，则创建他们
     }
-    3.6、initMessageSource() 初始化MessageSource（国际化文件支持的基础接口），详细内容不展开
-    3.7、onRefresh() 空方法，留给AbstractApplicationContext子类使用
-    3.8、registerListeners()
+    3.6、registerBeanPostProcessors(beanFactory)注册BeanPostProcessors
+    3.7、initMessageSource() 初始化MessageSource（国际化文件支持的基础接口），详细内容不展开
+    3.8、onRefresh() 空方法，留给AbstractApplicationContext子类使用
+    3.9、registerListeners()
     {
         1)为AbstractApplicationContext中的applicationEventMulticaster添加ApplicationListener
         2)触发earlyApplicationEvents里的所有event
     }
-    3.9、finishBeanFactoryInitialization(beanFactory)
+    3.10、finishBeanFactoryInitialization(beanFactory)
     {
         1）查找名为"conversionService"的bean，如果类型是ConversionService，把它设置为beanFactory的conversionService
             ConversionService：spring类型转换接口
@@ -196,7 +212,7 @@ new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
         5）保存当前所有的beanDefinitionNames到beanFactory的frozenBeanDefinitionNames
         6）DefaultListableBeanFactory.preInstantiateSingletons实例化剩下的非lazy单实例bean{...可能补}
     }
-    3.10、finishRefresh()
+    3.11、finishRefresh()
     {
         1）初始化lifecycleProcessor，从beanfactory取出，如果没有新建一个DefaultLifecycleProcessor并注册到beanfactory。
 
@@ -217,7 +233,7 @@ new AnnotationConfigApplicationContext(Class<?>... annotatedClasses)过程
         3）publishEvent(new ContextRefreshedEvent(this))发布事件
         4）LiveBeansView.registerApplicationContext(this)注册当前的context到LiveBeansView，不知道有什么用
     }
-    3.11、resetCommonCaches()清除缓存
+    3.12、resetCommonCaches()清除缓存
 
 ===================================================================================================
 
